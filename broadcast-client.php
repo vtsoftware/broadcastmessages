@@ -10,6 +10,17 @@ class BroadcastClient {
   public static int $message_length = 1024;
   public static int $timeout = 1;
 
+  public static function check_parse_json(array|String &$data): void {
+    if (is_array($data)) {
+      $data = json_encode($data, \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE);
+    } else {
+      $data_fc = \substr($data, 0, 1);
+      if ($data_fc === '[' || $data_fc === '{') {
+        $data = \json_decode($data, true);
+      }
+    }
+  }
+
   public function __construct(String $ip = '255.255.255.255', int $port = 8853) {
     $this->ip = $ip;
     $this->port = $port;
@@ -29,8 +40,11 @@ class BroadcastClient {
     $this->replyCallback = $callback;
     return $this;
   }
-  public function send(String $message): static {
-    $message = trim($message);
+  public function send(array|String $message): static {
+    if (is_string($message)) {
+      $message = trim($message);
+    }
+    static::check_parse_json($message);
     \socket_sendto($this->socket, $message, \strlen($message), 0, $this->ip, $this->port);
 
     $reply_buffer = '';
@@ -38,6 +52,7 @@ class BroadcastClient {
 
     if ($reply_buffer !== null && $this->replyCallback !== null) {
       $reply_buffer = \trim($reply_buffer);
+      static::check_parse_json($reply_buffer);
       call_user_func($this->replyCallback, $reply_buffer);
     }
 
@@ -46,7 +61,3 @@ class BroadcastClient {
     return $this;
   }
 }
-
-BroadcastClient::init()->onReply(function(String $message) {
-  echo 'szerver valasza: '.$message."\n";
-})->send('kliens kuldi szervernek');

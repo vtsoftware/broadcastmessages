@@ -1,4 +1,3 @@
-#!/usr/bin/php8.0
 <?php declare(strict_types=1);
 namespace VtSoftware\Tools\BroadcastMessages;
 
@@ -8,6 +7,17 @@ class BroadcastServer {
   private $socket;
   private \Closure $receiveCallback;
   public static int $message_length = 1024;
+
+  public static function check_parse_json(array|String &$data): void {
+    if (is_array($data)) {
+      $data = json_encode($data, \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE);
+    } else if (is_string($data)) {
+      $data_fc = \substr($data, 0, 1);
+      if ($data_fc === '[' || $data_fc === '{') {
+        $data = \json_decode($data, true);
+      }
+    }
+  }
 
   public function __construct(String $ip = '255.255.255.255', int $port = 8853) {
     $this->ip = $ip;
@@ -31,9 +41,14 @@ class BroadcastServer {
   public function run(): void {
     while (1) {
       if (@\socket_recvfrom($this->socket, $buffer, static::$message_length, 0, $ip, $port)) {
+        static::check_parse_json($buffer);
+
         if ($this->receiveCallback !== null) {
           $reply = call_user_func($this->receiveCallback, $buffer);
+
           if ($reply !== null) {
+            static::check_parse_json($reply);
+
             $reply = trim($reply);
             \socket_sendto($this->socket, $reply, strlen($reply), 0, $ip, $port);
           }
@@ -42,8 +57,3 @@ class BroadcastServer {
     }
   }
 }
-
-BroadcastServer::bind()->onReceive(function(String $message) {
-  echo 'beerkezett uzenet: '.$message."\n";
-  return $message.' -> szerver valasza kliensnek';
-})->run();
